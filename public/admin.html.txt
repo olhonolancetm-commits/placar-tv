@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin - Gerenciamento de Caixa</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #111a24; color: #fff; margin: 0; padding: 20px; }
+        .container { width: 100%; max-width: 1100px; margin: 0 auto; background-color: #1f2833; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2, h3 { text-align: center; color: #00f3ff; }
+        
+        /* Box de Login */
+        .login-box { max-width: 400px; margin: 50px auto; background-color: #111a24; padding: 30px; border-radius: 8px; border: 1px solid #45f3ff; }
+        .login-box input { width: 100%; padding: 10px; margin: 10px 0; background-color: #1f2833; border: 1px solid #45f3ff; color: #fff; border-radius: 5px; box-sizing: border-box; }
+        .login-box button { width: 100%; padding: 10px; background-color: #00f3ff; border: none; color: #000; font-weight: bold; cursor: pointer; border-radius: 5px; }
+        
+        /* Tabela de Relatórios */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #111a24; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #1f2833; font-size: 0.95rem; }
+        th { background-color: #00f3ff; color: #000; }
+        
+        /* Status visuais */
+        .status-espera { color: #00f3ff; font-style: italic; font-weight: bold; }
+        .status-pendente { color: #ffaa00; font-weight: bold; }
+        .status-confirmado { color: #5cee00; font-weight: bold; }
+        
+        /* Badges e Botões */
+        .badge-financeiro { background-color: #3a506b; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; display: inline-block; }
+        .btn-confirmar { background-color: #ffaa00; border: none; padding: 6px 12px; color: #000; font-weight: bold; cursor: pointer; border-radius: 4px; margin-bottom: 5px; display: block; width: 100%; }
+        .btn-confirmar:hover { background-color: #e09500; }
+        .btn-placar { background-color: #5cee00; border: none; padding: 6px 12px; color: #000; font-weight: bold; cursor: pointer; border-radius: 4px; display: block; width: 100%; }
+        .btn-placar:hover { background-color: #4cd400; }
+        
+        .mini-escudo { width: 30px; height: 30px; object-fit: contain; vertical-align: middle; margin-right: 5px; background: #111a24; border-radius: 50%; padding: 20px; padding: 2px; border: 1px solid #45f3ff; }
+        .logout-btn { background-color: #ff2222; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 5px; float: right; }
+        
+        .info-contato { font-size: 0.8rem; color: #a3a3a3; display: block; margin-top: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="telaLogin" class="login-box">
+        <h3>Login Admin da Quadra</h3>
+        <input type="text" id="usuario" placeholder="Usuário">
+        <input type="password" id="senha" placeholder="Senha">
+        <button onclick="fazerLogin()">Entrar</button>
+    </div>
+
+    <div id="painelAdmin" class="container" style="display: none;">
+        <button class="logout-btn" onclick="fazerLogout()">Sair</button>
+        <h2>Relatório Geral de Horários e Cobranças</h2>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Tipo de Conta</th>
+                    <th>Time Casa (Mandante)</th>
+                    <th>Time Visitante (Rival)</th>
+                    <th>Status</th>
+                    <th>Ações / Controle da TV</th>
+                </tr>
+            </thead>
+            <tbody id="tabelaAgendamentos">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        // CONFIGURAÇÃO DO SEU FIREBASE
+        const firebaseConfig = { 
+            databaseURL: "https://placar-quadra-default-rtdb.firebaseio.com/" 
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Usuário e Senha padrões do painel
+        const USER_ADMIN = "admin";
+        const PASSWORD_ADMIN = "123456";
+
+        function fazerLogin() {
+            const u = document.getElementById('usuario').value;
+            const p = document.getElementById('senha').value;
+            if (u === USER_ADMIN && p === PASSWORD_ADMIN) {
+                document.getElementById('telaLogin').style.display = 'none';
+                document.getElementById('painelAdmin').style.display = 'block';
+                carregarAgendamentos();
+            } else { 
+                alert('Usuário ou senha inválidos!'); 
+            }
+        }
+        
+        function fazerLogout() { 
+            document.getElementById('telaLogin').style.display = 'block'; 
+            document.getElementById('painelAdmin').style.display = 'none'; 
+        }
+
+        // BUSCA TODOS OS AGENDAMENTOS E EXIBE OS DADOS DE CONTATO E FINANCEIRO
+        function carregarAgendamentos() {
+            database.ref('/agendamentos').on('value', (snapshot) => {
+                const tabela = document.getElementById('tabelaAgendamentos');
+                tabela.innerHTML = "";
+                
+                snapshot.forEach((childSnapshot) => {
+                    const id = childSnapshot.key;
+                    const jogo = childSnapshot.val();
+
+                    // Tratamento de Status
+                    let txtStatus = "Pendente";
+                    let classeStatus = "status-pendente";
+                    if(jogo.status === "Aguardando Rival") { 
+                        txtStatus = "🔍 Buscando Rival"; 
+                        classeStatus = "status-espera"; 
+                    } else if(jogo.status === "Confirmado") { 
+                        txtStatus = "✅ Confirmado"; 
+                        classeStatus = "status-confirmado"; 
+                    }
+
+                    // Montagem inteligente dos botões de ações
+                    let botoesAcao = "";
+                    if(jogo.status === "Pendente") {
+                        botoesAcao = `<button class="btn-confirmar" onclick="confirmarHorario('${id}')">Confirmar Horário</button>`;
+                    } else if(jogo.status === "Confirmado") {
+                        botoesAcao = `<button class="btn-placar" onclick="enviarParaTV('${jogo.nomeCasa}', '${jogo.urlEscudoCasa}', '${jogo.nomeVisitante}', '${jogo.urlEscudoVisitante}')">Enviar p/ TV 📺</button>`;
+                    } else {
+                        botoesAcao = `<span style="font-size:0.85rem; color:#888;">Aguardando Matchmaking...</span>`;
+                    }
+
+                    // Informações extras dos responsáveis para o ADM poder cobrar ou ligar
+                    const infoCasa = `<span class="info-contato">Resp: ${jogo.responsavelCasa || 'Não informado'}<br>Tel: ${jogo.celularCasa || '-'}</span>`;
+                    const infoVisitante = jogo.nomeVisitante !== "Procurando..." ? 
+                        `<span class="info-contato">Resp: ${jogo.responsavelVisitante || 'Não informado'}<br>Tel: ${jogo.celularVisitante || '-'}</span>` : '';
+
+                    const linha = `
+                        <tr>
+                            <td><strong>${jogo.data}</strong><br>${jogo.horario}</td>
+                            <td><span class="badge-financeiro">${jogo.modoFinanceiro === 'Rachar' ? '💰 Racha (50%)' : '👑 Dono (100%)'}</span></td>
+                            <td>
+                                <img src="${jogo.urlEscudoCasa}" class="mini-escudo"><strong>${jogo.nomeCasa}</strong>
+                                ${infoCasa}
+                            </td>
+                            <td>
+                                <img src="${jogo.urlEscudoVisitante}" class="mini-escudo"><strong>${jogo.nomeVisitante}</strong>
+                                ${infoVisitante}
+                            </td>
+                            <td class="${classeStatus}">${txtStatus}</td>
+                            <td>${botoesAcao}</td>
+                        </tr>
+                    `;
+                    tabela.innerHTML += linha;
+                });
+            });
+        }
+
+        // CONFIRMAÇÃO DO HORÁRIO (MUDA STATUS PARA CONFIRMADO)
+        function confirmarHorario(id) {
+            database.ref('/agendamentos/' + id).update({ status: "Confirmado" })
+                .then(() => alert("Horário validado financeiramente e confirmado!"));
+        }
+
+        // ENVIA OS ESCUDOS E TIMES EM TEMPO REAL PARA O PLACAR DA TV
+        function enviarParaTV(nomeCasa, escudoCasa, nomeVisitante, escudoVisitante) {
+            database.ref('/placar_atual').update({
+                nomeCasa: nomeCasa, 
+                urlEscudoCasa: escudoCasa,
+                nomeVisitante: nomeVisitante, 
+                urlEscudoVisitante: escudoVisitante,
+                golsCasa: 0, 
+                golsVisitante: 0, 
+                tempo: "60:00"
+            }).then(() => alert("Sucesso! O jogo foi carregado no Placar da TV de 42\"."));
+        }
+    </script>
+</body>
+</html>

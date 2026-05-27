@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Placar Oficial - Arena Olho no Lance</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        /* Importando fonte digital para o cronômetro e placar */
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Teko:wght@600&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0b0c10;
+            color: #fff;
+            font-family: 'Teko', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Container Principal do Placar para TVs de 42" */
+        .placar-container {
+            width: 95vw;
+            max-width: 1200px;
+            background: linear-gradient(135deg, #1f2833 0%, #111a24 100%);
+            border: 4px solid #00f3ff;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.3);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        /* Topo: Nome da Quadra e Cronômetro */
+        .topo-placar {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+
+        .titulo-arena {
+            font-size: 2.5rem;
+            letter-spacing: 3px;
+            color: #5cee00;
+            text-transform: uppercase;
+            margin: 0 0 10px 0;
+            text-shadow: 0 0 10px rgba(92, 238, 0, 0.4);
+        }
+
+        .cronometro {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 4.5rem;
+            color: #ffaa00;
+            background-color: #0b0c10;
+            padding: 10px 30px;
+            border-radius: 10px;
+            border: 2px solid #ffaa00;
+            display: inline-block;
+            box-shadow: inset 0 0 15px rgba(255, 170, 0, 0.2);
+        }
+
+        /* Área dos Times e Gols */
+        .confronto-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        /* Blocos dos Times (Mandante e Visitante) */
+        .time-bloco {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .escudo-tv {
+            width: 180px;
+            height: 180px;
+            object-fit: contain;
+            background-color: rgba(255, 255, 255, 0.03);
+            border-radius: 50%;
+            border: 3px solid #00f3ff;
+            padding: 15px;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.15);
+            transition: 0.3s;
+        }
+
+        .nome-time {
+            font-size: 3.5rem;
+            text-transform: uppercase;
+            margin: 15px 0 0 0;
+            max-width: 320px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: 1px;
+        }
+
+        /* Bloco Central dos Números do Placar */
+        .gols-bloco {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            padding: 0 30px;
+        }
+
+        .numero-gol {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 7.5rem;
+            color: #fff;
+            background: #0b0c10;
+            width: 140px;
+            height: 160px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+            border: 3px solid #5cee00;
+            box-shadow: 0 0 20px rgba(92, 238, 0, 0.2);
+        }
+
+        .divisor-x {
+            font-size: 3rem;
+            color: #45f3ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="placar-container">
+        <div class="topo-placar">
+            <h1 class="titulo-arena">• Olho no Lance Arena •</h1>
+            <div id="tempoTV" class="cronometro">60:00</div>
+        </div>
+
+        <div class="confronto-area">
+            <div class="time-bloco">
+                <img id="tvEscudoCasa" src="https://via.placeholder.com/250?text=CASA" class="escudo-tv">
+                <h2 id="tvNomeCasa" class="nome-time">MANDANTE</h2>
+            </div>
+
+            <div class="gols-bloco">
+                <div id="tvGolsCasa" class="numero-gol">0</div>
+                <div class="divisor-x">VS</div>
+                <div id="tvGolsVisitante" class="numero-gol">0</div>
+            </div>
+
+            <div class="time-bloco">
+                <img id="tvEscudoVisitante" src="https://via.placeholder.com/250?text=VISITANTE" class="escudo-tv">
+                <h2 id="tvNomeVisitante" class="nome-time">VISITANTE</h2>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURAÇÃO DO SEU FIREBASE
+        const firebaseConfig = { 
+            databaseURL: "https://placar-quadra-default-rtdb.firebaseio.com/" 
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // 🔄 ESCUTA AS ALTERAÇÕES DO BANCO EM TEMPO REAL
+        database.ref('/placar_atual').on('value', (snapshot) => {
+            const dadosPlacar = snapshot.val();
+            
+            if (dadosPlacar) {
+                // Atualiza os nomes e trata os escudos para manter o tamanho fixo padrão
+                document.getElementById('tvNomeCasa').innerText = dadosPlacar.nomeCasa || "MANDANTE";
+                document.getElementById('tvEscudoCasa').src = dadosPlacar.urlEscudoCasa || "https://via.placeholder.com/250?text=CASA";
+                
+                document.getElementById('tvNomeVisitante').innerText = dadosPlacar.nomeVisitante || "VISITANTE";
+                document.getElementById('tvEscudoVisitante').src = dadosPlacar.urlEscudoVisitante || "https://via.placeholder.com/250?text=VISITANTE";
+                
+                // Atualiza os Gols (subidos pelo ESP32 ou painel)
+                document.getElementById('tvGolsCasa').innerText = dadosPlacar.golsCasa !== undefined ? dadosPlacar.golsCasa : 0;
+                document.getElementById('tvGolsVisitante').innerText = dadosPlacar.golsVisitante !== undefined ? dadosPlacar.golsVisitante : 0;
+                
+                // Atualiza o Tempo de jogo
+                document.getElementById('tempoTV').innerText = dadosPlacar.tempo || "60:00";
+            }
+        });
+    </script>
+</body>
+</html>

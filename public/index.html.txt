@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arena Olho no Lance - Perfil e Matchmaking</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #111a24; color: #fff; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 550px; background-color: #1f2833; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2, h3 { text-align: center; color: #00f3ff; margin-bottom: 20px; }
+        label { display: block; margin: 12px 0 4px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 10px; background-color: #111a24; border: 1px solid #45f3ff; color: #fff; border-radius: 5px; box-sizing: border-box; font-family: sans-serif; }
+        textarea { resize: vertical; height: 80px; }
+        button { width: 100%; padding: 12px; background-color: #5cee00; border: none; color: #000; font-weight: bold; font-size: 1.1rem; border-radius: 5px; margin-top: 20px; cursor: pointer; transition: 0.2s; }
+        button:hover { background-color: #4cd400; }
+        .box-alternativa { border-top: 1px solid rgba(255,255,255,0.1); margin-top: 15px; padding-top: 15px; text-align: center; }
+        .link-acao { color: #00f3ff; cursor: pointer; text-decoration: underline; }
+        
+        .box-opcoes { background: rgba(0,243,255,0.05); padding: 15px; border-radius: 5px; border: 1px dashed #45f3ff; margin-top: 15px; }
+        .radio-inline { display: flex; gap: 20px; margin: 8px 0 15px; }
+        .radio-inline label { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: normal; }
+        .radio-inline input { width: auto; cursor: pointer; }
+        .infos-usuario { background: #111a24; padding: 10px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #5cee00; }
+        
+        /* Modal e Card de Perfil do Rival */
+        .modal-sucesso { display: none; background: #0b0c10; border: 2px solid #5cee00; border-radius: 8px; padding: 20px; margin-top: 20px; text-align: center; }
+        .modal-sucesso h4 { color: #5cee00; font-size: 1.3rem; margin-bottom: 10px; }
+        
+        .card-rival { background: #1f2833; border: 1px solid #00f3ff; border-radius: 8px; padding: 15px; margin: 15px 0; text-align: left; display: flex; align-items: center; gap: 15px; }
+        .escudo-rival-perfil { width: 80px; height: 80px; object-fit: contain; background: #111a24; border-radius: 50%; border: 2px solid #00f3ff; padding: 5px; flex-shrink: 0; }
+        .info-rival-texto h5 { margin: 0 0 5px 0; font-size: 1.2rem; color: #5cee00; text-transform: uppercase; }
+        .info-rival-texto p { margin: 3px 0; font-size: 0.9rem; color: #c5c6c7; }
+
+        .btn-whatsapp { display: inline-block; background-color: #25D366; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; margin-top: 10px; width: 100%; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="secaoLogin">
+            <h2>Entrar no Sistema</h2>
+            <label>E-mail:</label> <input type="email" id="loginEmail" required>
+            <label>Senha:</label> <input type="password" id="loginSenha" required>
+            <button onclick="logar()">Entrar</button>
+            <div class="box-alternativa">Não tem time? <span class="link-acao" onclick="mostrarAba('Cadastro')">Cadastre-se aqui</span></div>
+        </div>
+
+        <div id="secaoCadastro" style="display:none;">
+            <h2>Cadastrar Novo Time</h2>
+            <label>Seu Nome (Responsável):</label> <input type="text" id="cadNome" required>
+            <label>Seu Celular / WhatsApp:</label> <input type="tel" id="cadCelular" required placeholder="(11) 99999-9999">
+            <label>Nome do Seu Time:</label> <input type="text" id="cadTime" required>
+            <label>Ano de Fundação:</label> <input type="number" id="cadAno" required placeholder="Ex: 2020">
+            <label>URL do Escudo (Link da Imagem):</label> <input type="url" id="cadEscudo" required placeholder="https://...">
+            
+            <label>Sobre o Meu Time (História, Títulos, Conquistas):</label>
+            <textarea id="cadSobre" required placeholder="Ex: Campeão do Racha das Terças 2025. Time focado em contra-ataques rápidos."></textarea>
+
+            <label>E-mail:</label> <input type="email" id="cadEmail" required>
+            <label>Senha:</label> <input type="password" id="cadSenha" required>
+            <button onclick="cadastrar()">Criar Conta e Time</button>
+            <div class="box-alternativa">Já tem conta? <span class="link-acao" onclick="mostrarAba('Login')">Faça Login</span></div>
+        </div>
+
+        <div id="secaoAgendamento" style="display:none;">
+            <h2>Marcar Jogo na Quadra</h2>
+            <div class="infos-usuario">
+                <p>⚽ Olá, <span id="userNome">...</span>!</p>
+                <p>🛡️ Seu Time: <strong id="userTime">...</strong></p>
+            </div>
+
+            <label>Escolha o Dia:</label> <input type="date" id="dataJogo" required>
+            <label>Escolha o Horário:</label>
+            <select id="horarioJogo" required>
+                <option value="">Selecione...</option>
+                <option value="19:00">19:00 às 20:00</option>
+                <option value="20:00">20:00 às 21:00</option>
+                <option value="21:00">21:00 às 22:00</option>
+                <option value="22:00">22:00 às 23:00</option>
+            </select>
+
+            <div class="box-opcoes">
+                <label>Financeiro do Horário:</label>
+                <div class="radio-inline">
+                    <label><input type="radio" name="financeiro" value="Dono" checked onchange="atualizarOpcoesRival()"> Sou Dono do Horário (Inteiro)</label>
+                    <label><input type="radio" name="financeiro" value="Rachar" onchange="atualizarOpcoesRival()"> Quero Rachar (Metade)</label>
+                </div>
+
+                <label>Adversário:</label>
+                <div class="radio-inline">
+                    <label><input type="radio" name="tipoRival" value="Conhecido" checked onchange="atualizarAbasRival()"> Já tenho rival</label>
+                    <label><input type="radio" name="tipoRival" value="Procurar" onchange="atualizarAbasRival()"> Procurar no site</label>
+                </div>
+
+                <div id="campoRivalFixo">
+                    <label>Nome do Time Rival:</label> <input type="text" id="rivalNome" placeholder="Ex: Paredão FC">
+                    <label>Link do Escudo Rival:</label> <input type="url" id="rivalEscudo" placeholder="https://...">
+                </div>
+            </div>
+
+            <button onclick="processarAgendamento()">Finalizar Pedido de Horário</button>
+            
+            <div id="modalConfirmacao" class="modal-sucesso">
+                <h4 id="modalTitulo">Pedido Registrado!</h4>
+                <p id="modalTexto"></p>
+                
+                <div id="areaContatoRival" style="display: none;">
+                    <div class="card-rival">
+                        <img id="rivalPerfilEscudo" src="" class="escudo-rival-perfil">
+                        <div class="info-rival-texto">
+                            <h5 id="rivalPerfilTime">Nome do Time</h5>
+                            <p>📅 <strong>Fundação:</strong> <span id="rivalPerfilAno"></span></p>
+                            <p>🏆 <strong>Sobre/Títulos:</strong> <span id="rivalPerfilSobre"></span></p>
+                            <p style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:5px;">👤 <strong>Contato:</strong> <span id="rivalRespNome"></span></p>
+                            <p>📞 <strong>WhatsApp:</strong> <span id="rivalRespCelular"></span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <a id="btnWhatsQuadra" href="https://wa.me/5511999999999?text=Quero%20confirmar%20meu%20horario%20na%20quadra" target="_blank" class="btn-whatsapp">Chamar Administração da Quadra 📱</a>
+            </div>
+
+            <button style="background-color:#ff2222; color:#fff; margin-top: 40px;" onclick="deslogar()">Sair da Conta</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = { databaseURL: "https://placar-quadra-default-rtdb.firebaseio.com/" };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
+        let dadosUsuarioLogado = null;
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                database.ref('/usuarios/' + user.uid).once('value').then(snapshot => {
+                    dadosUsuarioLogado = snapshot.val();
+                    if(dadosUsuarioLogado) {
+                        document.getElementById('userNome').innerText = dadosUsuarioLogado.responsavel;
+                        document.getElementById('userTime').innerText = dadosUsuarioLogado.nomeTime;
+                        mostrarAba('Agendamento');
+                    }
+                });
+            } else { mostrarAba('Login'); }
+        });
+
+        function mostrarAba(aba) {
+            document.getElementById('secaoLogin').style.display = aba === 'Login' ? 'block' : 'none';
+            document.getElementById('secaoCadastro').style.display = aba === 'Cadastro' ? 'block' : 'none';
+            document.getElementById('secaoAgendamento').style.display = aba === 'Agendamento' ? 'block' : 'none';
+            document.getElementById('modalConfirmacao').style.display = 'none';
+        }
+
+        function atualizarOpcoesRival() {
+            if(document.querySelector('input[name="financeiro"]:checked').value === "Rachar") {
+                document.querySelector('input[name="tipoRival"][value="Procurar"]').checked = true;
+                atualizarAbasRival();
+            }
+        }
+
+        function atualizarAbasRival() {
+            const tipoRival = document.querySelector('input[name="tipoRival"]:checked').value;
+            if(document.querySelector('input[name="financeiro"]:checked').value === "Rachar" && tipoRival === "Conhecido") {
+                alert("Para rachar o valor pelo site, selecione 'Procurar adversário no site'.");
+                document.querySelector('input[name="tipoRival"][value="Procurar"]').checked = true;
+                document.getElementById('campoRivalFixo').style.display = 'none';
+                return;
+            }
+            document.getElementById('campoRivalFixo').style.display = tipoRival === 'Conhecido' ? 'block' : 'none';
+        }
+
+        function cadastrar() {
+            const email = document.getElementById('cadEmail').value; const BlackPass = document.getElementById('cadSenha').value;
+            const nome = document.getElementById('cadNome').value; const celular = document.getElementById('cadCelular').value;
+            const time = document.getElementById('cadTime').value; const escudo = document.getElementById('cadEscudo').value;
+            const ano = document.getElementById('cadAno').value; const sobre = document.getElementById('cadSobre').value;
+            
+            if(!email || !BlackPass || !nome || !celular || !time || !ano || !sobre) return alert("Preencha todos os campos!");
+
+            auth.createUserWithEmailAndPassword(email, BlackPass).then(cred => {
+                return database.ref('/usuarios/' + cred.user.uid).set({ 
+                    responsavel: nome, celular: celular, nomeTime: time, urlEscudo: escudo, 
+                    anoFundacao: ano, sobreTime: sobre, uid: cred.user.uid
+                });
+            }).catch(err => alert(err.message));
+        }
+
+        function logar() { auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginSenha').value).catch(err => alert(err.message)); }
+        function deslogar() { auth.signOut(); }
+
+        function processarAgendamento() {
+            const data = document.getElementById('dataJogo').value;
+            const horario = document.getElementById('horarioJogo').value;
+            const financeiro = document.querySelector('input[name="financeiro"]:checked').value;
+            const tipoRival = document.querySelector('input[name="tipoRival"]:checked').value;
+
+            if (!data || !horario) return alert("Escolha o dia e o horário!");
+            document.getElementById('areaContatoRival').style.display = 'none';
+
+            if (tipoRival === "Conhecido") {
+                const rivalNome = document.getElementById('rivalNome').value || "Adversário";
+                const rivalEscudo = document.getElementById('rivalEscudo').value || "https://via.placeholder.com/250?text=RIVAL";
+                salvarNoFirebase(data, horario, dadosUsuarioLogado.nomeTime, dadosUsuarioLogado.urlEscudo, rivalNome, rivalEscudo, "Pendente", financeiro, dadosUsuarioLogado, null);
+            } else {
+                database.ref('/agendamentos').orderByChild('data').equalTo(data).once('value').then(snapshot => {
+                    let matchID = null; let matchJogo = null;
+                    snapshot.forEach(child => {
+                        const jogo = child.val();
+                        if (jogo.horario === horario && jogo.status === "Aguardando Rival" && jogo.modoFinanceiro === financeiro && jogo.nomeCasa !== dadosUsuarioLogado.nomeTime) {
+                            matchID = child.key; matchJogo = child.val();
+                        }
+                    });
+
+                    if (matchJogo) {
+                        // Cruza os dados no agendamento e anexa os metadados do rival de quem estava esperando
+                        database.ref('/agendamentos/' + matchID).update({
+                            nomeVisitante: dadosUsuarioLogado.nomeTime,
+                            urlEscudoVisitante: dadosUsuarioLogado.urlEscudo,
+                            responsavelVisitante: dadosUsuarioLogado.responsavel,
+                            celularVisitante: dadosUsuarioLogado.celular,
+                            uidVisitante: dadosUsuarioLogado.uid, // Guarda o ID do rival para futuras consultas
+                            status: "Pendente" 
+                        }).then(() => {
+                            // PUXA OS DADOS DO RIVAL (Dono do Time Casa que já estava registrado)
+                            document.getElementById('modalTitulo').innerText = "💥 CONFRONTO ENCONTRADO!";
+                            document.getElementById('modalTexto').innerText = "Jogo casado! Analise o perfil do seu adversário abaixo, combine os uniformes e chame a quadra para liberar!";
+                            
+                            // Preenche o Card de Perfil do Rival dinamicamente com as novas variáveis
+                            document.getElementById('rivalPerfilEscudo').src = matchJogo.escudoCasaPerfil || matchJogo.urlEscudoCasa;
+                            document.getElementById('rivalPerfilTime').innerText = matchJogo.nomeCasa;
+                            document.getElementById('rivalPerfilAno').innerText = matchJogo.anoCasaPerfil || "Não Informado";
+                            document.getElementById('rivalPerfilSobre').innerText = matchJogo.sobreCasaPerfil || "Sem descrição.";
+                            document.getElementById('rivalRespNome').innerText = matchJogo.responsavelCasa;
+                            document.getElementById('rivalRespCelular').innerText = matchJogo.celularCasa;
+                            
+                            document.getElementById('areaContatoRival').style.display = 'block';
+                            document.getElementById('modalConfirmacao').style.display = 'block';
+                        });
+                    } else {
+                        // Vai para a fila, levando todo o seu dossiê/perfil do time para o próximo ver
+                        salvarNoFirebase(data, horario, dadosUsuarioLogado.nomeTime, dadosUsuarioLogado.urlEscudo, "Procurando...", "https://via.placeholder.com/250?text=?", "Aguardando Rival", financeiro, dadosUsuarioLogado, true);
+                    }
+                });
+            }
+        }
+
+        function salvarNoFirebase(data, horario, casa, escudoCasa, visitante, escudoVisitante, status, financeiro, donoDados, colocarFila) {
+            const jogoData = {
+                data: data, horario: horario,
+                nomeCasa: casa, urlEscudoCasa: escudoCasa,
+                nomeVisitante: visitante, urlEscudoVisitante: escudoVisitante,
+                responsavelCasa: donoDados.responsavel, celularCasa: donoDados.celular,
+                uidCasa: donoDados.uid,
+                // Leva o perfil do criador para o banco para o rival conseguir ler no match instantâneo
+                anoCasaPerfil: donoDados.anoFundacao || "",
+                sobreCasaPerfil: donoDados.sobreTime || "",
+                escudoCasaPerfil: donoDados.urlEscudo || "",
+                status: status, modoFinanceiro: financeiro
+            };
+
+            database.ref('/agendamentos').push().set(jogoData).then(() => {
+                document.getElementById('modalTitulo').innerText = "Pedido Enviado!";
+                if (colocarFila) {
+                    document.getElementById('modalTexto').innerText = "Você está na lista de espera. O seu perfil de time foi publicado neste horário. Quando um rival aceitar, ele verá seus dados!";
+                } else {
+                    document.getElementById('modalTexto').innerText = "Agendamento pré-registrado. Clique abaixo para mandar mensagem para a administração!";
+                }
+                document.getElementById('modalConfirmacao').style.display = 'block';
+            });
+        }
+    </script>
+</body>
+</html>
